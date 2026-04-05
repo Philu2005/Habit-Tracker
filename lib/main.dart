@@ -90,8 +90,7 @@ class _DateSelectorState extends State<_DateSelector> {
   }
 
   void _ensureDateVisible(DateTime date) {
-    int idx = dates.indexWhere((d) =>
-        d.year == date.year && d.month == date.month && d.day == date.day);
+    int idx = _indexOfDate(date);
     if (idx == -1) {
       // Rebaue das Fenster rund um das Ziel-Datum
       final base = DateTime(date.year, date.month, date.day);
@@ -108,27 +107,30 @@ class _DateSelectorState extends State<_DateSelector> {
     final o = oldWidget.selectedDate;
     final n = widget.selectedDate;
     if (o.year != n.year || o.month != n.month || o.day != n.day) {
-      _ensureDateVisible(n);
+      if (_indexOfDate(n) == -1) {
+        _ensureDateVisible(n);
+      }
     }
   }
 
-  void _scrollToIndex(int index, {bool animate = true, bool notify = true, Duration? duration}) {
+  void _scrollToIndex(
+    int index, {
+    bool animate = true,
+    bool notify = true,
+    Duration? duration,
+  }) {
     final offset = index * itemWidth;
     final animDuration = duration ?? const Duration(milliseconds: 250);
 
     if (animate) {
       _isAnimating = true;
       _controller
-          .animateTo(
-            offset,
-            duration: animDuration,
-            curve: Curves.easeOut,
-          )
+          .animateTo(offset, duration: animDuration, curve: Curves.easeOut)
           .whenComplete(() {
-        _isAnimating = false;
-        if (!mounted) return;
-        if (notify) widget.onChanged(dates[index]);
-      });
+            _isAnimating = false;
+            if (!mounted) return;
+            if (notify) widget.onChanged(dates[index]);
+          });
     } else {
       _controller.jumpTo(offset);
       if (notify) widget.onChanged(dates[index]);
@@ -143,35 +145,32 @@ class _DateSelectorState extends State<_DateSelector> {
     index = index.clamp(0, dates.length - 1);
 
     final targetOffset = index * itemWidth;
-    if ((targetOffset - _controller.offset).abs() < 0.5) {
-      final d = dates[index];
-      final alreadySelected = d.year == widget.selectedDate.year &&
-          d.month == widget.selectedDate.month &&
-          d.day == widget.selectedDate.day;
-      if (!alreadySelected) {
-        widget.onChanged(dates[index]);
-      }
-      return;
-    }
-
-    _scrollToIndex(index);
+    if ((targetOffset - _controller.offset).abs() < 0.5) return;
+    _scrollToIndex(index, notify: false);
   }
 
   void _onTap(int index) {
     _scrollToIndex(index, duration: const Duration(milliseconds: 160));
   }
 
+  int _indexOfDate(DateTime date) {
+    return dates.indexWhere(
+      (d) => d.year == date.year && d.month == date.month && d.day == date.day,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
     return SizedBox(
       height: 128,
       child: Stack(
         alignment: Alignment.center,
         children: [
-
           /// 🔥 LIST
           NotificationListener<ScrollNotification>(
             onNotification: (notification) {
@@ -196,8 +195,12 @@ class _DateSelectorState extends State<_DateSelector> {
 
                 final isSelected =
                     date.year == widget.selectedDate.year &&
-                        date.month == widget.selectedDate.month &&
-                        date.day == widget.selectedDate.day;
+                    date.month == widget.selectedDate.month &&
+                    date.day == widget.selectedDate.day;
+                final isToday =
+                    date.year == today.year &&
+                    date.month == today.month &&
+                    date.day == today.day;
 
                 /// 🔥 STABILE CENTER BERECHNUNG
                 /// Padding ist bereits in der ListView berücksichtigt,
@@ -224,11 +227,21 @@ class _DateSelectorState extends State<_DateSelector> {
                           children: [
                             // WEEKDAY
                             Text(
-                              ["Mo","Di","Mi","Do","Fr","Sa","So"][date.weekday - 1],
+                              [
+                                "Mo",
+                                "Di",
+                                "Mi",
+                                "Do",
+                                "Fr",
+                                "Sa",
+                                "So",
+                              ][date.weekday - 1],
                               style: TextStyle(
                                 color: isSelected
                                     ? (isDark ? Colors.white : Colors.black87)
-                                    : (isDark ? Colors.white70 : Colors.black54),
+                                    : (isDark
+                                          ? Colors.white70
+                                          : Colors.black54),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 0.2,
@@ -249,24 +262,31 @@ class _DateSelectorState extends State<_DateSelector> {
                                     ? const LinearGradient(
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
-                                        colors: [Color(0xFF7C7AE6), Color(0xFFB388FF)],
+                                        colors: [
+                                          Color(0xFF7C7AE6),
+                                          Color(0xFFB388FF),
+                                        ],
                                       )
                                     : null,
                                 color: isSelected
                                     ? null
-                                    : (isDark ? const Color(0xFF1C1C1E) : Colors.white),
+                                    : (isDark
+                                          ? const Color(0xFF1C1C1E)
+                                          : Colors.white),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
                                   color: isSelected
                                       ? Colors.transparent
                                       : (isDark
-                                          ? Colors.white.withOpacity(0.06)
-                                          : Colors.black.withOpacity(0.06)),
+                                            ? Colors.white.withOpacity(0.06)
+                                            : Colors.black.withOpacity(0.06)),
                                 ),
                                 boxShadow: isSelected
                                     ? [
                                         BoxShadow(
-                                          color: const Color(0xFF7C7AE6).withOpacity(0.35),
+                                          color: const Color(
+                                            0xFF7C7AE6,
+                                          ).withOpacity(0.35),
                                           blurRadius: 16,
                                           offset: const Offset(0, 8),
                                         ),
@@ -278,18 +298,37 @@ class _DateSelectorState extends State<_DateSelector> {
                                   fit: BoxFit.scaleDown,
                                   child: Builder(
                                     builder: (_) {
-                                      final monthLabel = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"][date.month - 1];
-                                      final d = date.day.toString().padLeft(2, '0');
+                                      final monthLabel = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mär",
+                                        "Apr",
+                                        "Mai",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Okt",
+                                        "Nov",
+                                        "Dez",
+                                      ][date.month - 1];
+                                      final d = date.day.toString().padLeft(
+                                        2,
+                                        '0',
+                                      );
                                       return Column(
                                         mainAxisSize: MainAxisSize.min,
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
                                           Text(
                                             d,
                                             style: TextStyle(
                                               color: isSelected
                                                   ? Colors.white
-                                                  : (isDark ? Colors.white : Colors.black),
+                                                  : (isDark
+                                                        ? Colors.white
+                                                        : Colors.black),
                                               fontWeight: FontWeight.w700,
                                               fontSize: 17,
                                             ),
@@ -299,7 +338,9 @@ class _DateSelectorState extends State<_DateSelector> {
                                             monthLabel,
                                             style: TextStyle(
                                               color: isSelected
-                                                  ? Colors.white.withOpacity(0.95)
+                                                  ? Colors.white.withOpacity(
+                                                      0.95,
+                                                    )
                                                   : Colors.grey,
                                               fontWeight: FontWeight.w600,
                                               fontSize: 11,
@@ -313,6 +354,19 @@ class _DateSelectorState extends State<_DateSelector> {
                                 ),
                               ),
                             ),
+                            const SizedBox(height: 6),
+                            AnimatedOpacity(
+                              duration: const Duration(milliseconds: 180),
+                              opacity: isToday ? 1 : 0,
+                              child: Container(
+                                width: 50,
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.25),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -320,19 +374,6 @@ class _DateSelectorState extends State<_DateSelector> {
                   ),
                 );
               },
-            ),
-          ),
-
-          /// 🔥 CENTER INDICATOR (JETZT SIEHT MAN DIE MITTE)
-          Positioned(
-            bottom: 6,
-            child: Container(
-              width: 50,
-              height: 3,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.25),
-                borderRadius: BorderRadius.circular(2),
-              ),
             ),
           ),
         ],
@@ -345,10 +386,7 @@ class _DateSelector extends StatefulWidget {
   final DateTime selectedDate;
   final Function(DateTime) onChanged;
 
-  const _DateSelector({
-    required this.selectedDate,
-    required this.onChanged,
-  });
+  const _DateSelector({required this.selectedDate, required this.onChanged});
 
   @override
   State<_DateSelector> createState() => _DateSelectorState();
@@ -426,7 +464,10 @@ class _HomePageState extends State<HomePage> {
           child: ListView(
             children: [
               const ListTile(
-                title: Text("Menü", style: TextStyle(fontWeight: FontWeight.w600)),
+                title: Text(
+                  "Menü",
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
               const Divider(height: 1),
               ListTile(
@@ -466,7 +507,6 @@ class _HomePageState extends State<HomePage> {
 
       body: Column(
         children: [
-
           /// 🔥 DATE SELECTOR
           _DateSelector(
             selectedDate: selectedDate,
@@ -501,86 +541,112 @@ class _HomePageState extends State<HomePage> {
             child: todaysHabits.isEmpty
                 ? const Center(child: Text("🎉 Keine Todos heute!"))
                 : ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: todaysHabits.asMap().entries.map((entry) {
-                final index = entry.key;
-                final habit = entry.value;
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: todaysHabits.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final habit = entry.value;
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _SwipeToDelete(
-                    key: ValueKey(habit.id),
-                    onDelete: () {
-                      () async {
-                        try {
-                          await store.delete(habit.id);
-                          if (!mounted) return;
-                          setState(() {
-                            habits.removeWhere((h) => h.id == habit.id);
-                          });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Deleted '${habit.name}'")),
-                          );
-                        } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Löschen fehlgeschlagen")),
-                          );
-                        }
-                      }();
-                    },
-                    child: HabitTile(
-                      name: habit.name,
-                      isDone: habit.isDone,
-                      status: habit.status,
-                      categoryColor: (() {
-                        final c = categories.firstWhere(
-                          (c) => c.id == habit.categoryId,
-                          orElse: () => Category(id: -1, name: '', color: 0, iconKey: 'category'),
-                        );
-                        return c.id == -1 ? null : Color(c.color);
-                      })(),
-                      categoryIcon: (() {
-                        final c = categories.firstWhere(
-                          (c) => c.id == habit.categoryId,
-                          orElse: () => Category(id: -1, name: '', color: 0, iconKey: 'category'),
-                        );
-                        if (c.id == -1) return null;
-                        return iconFromKey(c.iconKey);
-                      })(),
-                      categoryName: (() {
-                        final c = categories.firstWhere(
-                          (c) => c.id == habit.categoryId,
-                          orElse: () => Category(id: -1, name: '', color: 0, iconKey: 'category'),
-                        );
-                        return c.id == -1 ? null : c.name;
-                      })(),
-                        subDone: habit.subtasks.where((s) => s.isDone).length,
-                        subTotal: habit.subtasks.length,
-                      onToggle: () async {
-                        final updated = await store.toggleDone(habit.id);
-                        if (!mounted || updated == null) return;
-                        setState(() {
-                          habits = habits.map((h) => h.id == habit.id ? updated : h).toList();
-                        });
-                      },
-                      onOpen: () async {
-                        await showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          builder: (_) => SubtasksSheet(habitId: habit.id, habitName: habit.name),
-                        );
-                        if (!mounted) return;
-                        final items = await store.getByDate(selectedDate);
-                        setState(() {
-                          habits = items;
-                        });
-                      },
-                    ),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _SwipeToDelete(
+                          key: ValueKey(habit.id),
+                          onDelete: () {
+                            () async {
+                              try {
+                                await store.delete(habit.id);
+                                if (!mounted) return;
+                                setState(() {
+                                  habits.removeWhere((h) => h.id == habit.id);
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text("Deleted '${habit.name}'"),
+                                  ),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text("Löschen fehlgeschlagen"),
+                                  ),
+                                );
+                              }
+                            }();
+                          },
+                          child: HabitTile(
+                            name: habit.name,
+                            isDone: habit.isDone,
+                            status: habit.status,
+                            categoryColor: (() {
+                              final c = categories.firstWhere(
+                                (c) => c.id == habit.categoryId,
+                                orElse: () => Category(
+                                  id: -1,
+                                  name: '',
+                                  color: 0,
+                                  iconKey: 'category',
+                                ),
+                              );
+                              return c.id == -1 ? null : Color(c.color);
+                            })(),
+                            categoryIcon: (() {
+                              final c = categories.firstWhere(
+                                (c) => c.id == habit.categoryId,
+                                orElse: () => Category(
+                                  id: -1,
+                                  name: '',
+                                  color: 0,
+                                  iconKey: 'category',
+                                ),
+                              );
+                              if (c.id == -1) return null;
+                              return iconFromKey(c.iconKey);
+                            })(),
+                            categoryName: (() {
+                              final c = categories.firstWhere(
+                                (c) => c.id == habit.categoryId,
+                                orElse: () => Category(
+                                  id: -1,
+                                  name: '',
+                                  color: 0,
+                                  iconKey: 'category',
+                                ),
+                              );
+                              return c.id == -1 ? null : c.name;
+                            })(),
+                            subDone: habit.subtasks
+                                .where((s) => s.isDone)
+                                .length,
+                            subTotal: habit.subtasks.length,
+                            onToggle: () async {
+                              final updated = await store.toggleDone(habit.id);
+                              if (!mounted || updated == null) return;
+                              setState(() {
+                                habits = habits
+                                    .map((h) => h.id == habit.id ? updated : h)
+                                    .toList();
+                              });
+                            },
+                            onOpen: () async {
+                              await showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                builder: (_) => SubtasksSheet(
+                                  habitId: habit.id,
+                                  habitName: habit.name,
+                                ),
+                              );
+                              if (!mounted) return;
+                              final items = await store.getByDate(selectedDate);
+                              setState(() {
+                                habits = items;
+                              });
+                            },
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
-                );
-              }).toList(),
-            ),
           ),
         ],
       ),
@@ -619,345 +685,464 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
-        return StatefulBuilder(builder: (ctx, setModal) {
-          final insets = MediaQuery.of(ctx).viewInsets;
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            final insets = MediaQuery.of(ctx).viewInsets;
 
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => FocusScope.of(ctx).unfocus(),
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: insets.bottom),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(ctx).size.height * 0.95,
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(20),
-                          topRight: Radius.circular(20),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.25),
-                            blurRadius: 20,
-                            offset: const Offset(0, -8),
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => FocusScope.of(ctx).unfocus(),
+              child: AnimatedPadding(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: insets.bottom),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(ctx).size.height * 0.95,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF1C1C1E)
+                              : Colors.white,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(20),
+                            topRight: Radius.circular(20),
                           ),
-                        ],
-                      ),
-                      child: SafeArea(
-                        top: false,
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Center(
-                                child: Container(
-                                  width: 44,
-                                  height: 4,
-                                  decoration: BoxDecoration(
-                                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                "Neues Todo",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-
-                              const SizedBox(height: 16),
-
-                              TextField(
-                                controller: controller,
-                                focusNode: focusNode,
-                                autofocus: true,
-                                maxLength: titleMax,
-                                maxLengthEnforcement: MaxLengthEnforcement.enforced,
-                                onChanged: (v) => setModal(() => titleText = v),
-                                textInputAction: TextInputAction.done,
-                                onSubmitted: (_) => FocusScope.of(ctx).unfocus(),
-                                decoration: InputDecoration(
-                                  hintText: "z. B. Wasser trinken 💧",
-                                  counterText: "${controller.text.characters.length}/$titleMax",
-                                  filled: true,
-                                  fillColor: isDark
-                                      ? const Color(0xFF2C2C2E)
-                                      : const Color(0xFFF2F2F7),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 16),
-
-                              /// 🔥 DATE PICKER (optional)
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  OutlinedButton.icon(
-                                    onPressed: () async {
-                                      FocusScope.of(ctx).unfocus();
-                                      final initial = dueDate ?? selectedDate;
-                                      final picked = await showDatePicker(
-                                        context: ctx,
-                                        initialDate: initial,
-                                        firstDate: DateTime(2000),
-                                        lastDate: DateTime(2100),
-                                        helpText: "Datum wählen (optional)",
-                                      );
-                                      if (picked != null) {
-                                        final normalized = DateTime(picked.year, picked.month, picked.day);
-                                        setModal(() {
-                                          dueDate = normalized;
-                                        });
-                                      }
-                                    },
-                                    icon: const Icon(Icons.event),
-                                    label: Text(
-                                      (() {
-                                        if (dueDate == null) return "Datum wählen";
-                                        final w = ["Mo","Di","Mi","Do","Fr","Sa","So"][dueDate!.weekday - 1];
-                                        final m = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"][dueDate!.month - 1];
-                                        return "$w, ${dueDate!.day.toString().padLeft(2, '0')} $m ${dueDate!.year}";
-                                      })(),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.25),
+                              blurRadius: 20,
+                              offset: const Offset(0, -8),
+                            ),
+                          ],
+                        ),
+                        child: SafeArea(
+                          top: false,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Center(
+                                  child: Container(
+                                    width: 44,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          (isDark ? Colors.white : Colors.black)
+                                              .withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(2),
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    "Optional – wähle ein Datum",
-                                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                                  ),
-                                ],
-                              ),
-
-                              const SizedBox(height: 12),
-
-                              // Kategorienauswahl
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text("Kategorie (optional)", style: TextStyle(fontWeight: FontWeight.w600)),
-                                  TextButton.icon(
-                                    onPressed: () async {
-                                      FocusScope.of(ctx).unfocus();
-                                      await Navigator.of(ctx).push(
-                                        MaterialPageRoute(builder: (_) => const CategoriesPage()),
-                                      );
-                                      final updated = await store.getCategories();
-                                      if (!mounted) return;
-                                      setState(() {
-                                        categories = updated;
-                                      });
-                                      setModal(() {});
-                                    },
-                                    icon: const Icon(Icons.edit, size: 18),
-                                    label: const Text("Verwalten"),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  icon: const Icon(Icons.category_outlined),
-                                  label: Text(
-                                    () {
-                                      final c = categories.firstWhere(
-                                        (c) => c.id == selectedCategoryId,
-                                        orElse: () => Category(id: -1, name: 'Keine', color: 0, iconKey: 'category'),
-                                      );
-                                      return c.id == -1 ? "Kategorie wählen" : "Kategorie: ${c.name}";
-                                    }(),
-                                  ),
-                                  onPressed: () async {
-                                    FocusScope.of(ctx).unfocus();
-                                    final chosen = await showModalBottomSheet<int?>(
-                                      context: ctx,
-                                      isScrollControlled: true,
-                                      useSafeArea: true,
-                                      backgroundColor: Colors.transparent,
-                                      builder: (_) {
-                                        return FractionallySizedBox(
-                                          heightFactor: 0.9,
-                                          child: CategoryPickerSheet(
-                                            categories: categories,
-                                            initial: selectedCategoryId,
-                                          ),
-                                        );
-                                      },
-                                    );
-                                    setModal(() => selectedCategoryId = chosen);
-                                  },
                                 ),
-                              ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  "Neues Todo",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
 
-                              const SizedBox(height: 16),
+                                const SizedBox(height: 16),
 
-                              // Unterpunkte (optional)
-                              const Text("Unterpunkte (optional)", style: TextStyle(fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 8),
-                              OutlinedButton.icon(
-                                onPressed: () async {
-                                  FocusScope.of(ctx).unfocus();
-                                  final result = await showModalBottomSheet<List<SubTask>>(
-                                    context: ctx,
-                                    isScrollControlled: true,
-                                    useSafeArea: true,
-                                    backgroundColor: Colors.transparent,
-                                    builder: (context) {
-                                      final kb = MediaQuery.of(context).viewInsets.bottom;
-                                      final sheet = FractionallySizedBox(
-                                        heightFactor: 0.95,
-                                        child: SafeArea(
-                                          top: false,
-                                          child: AnimatedContainer(
-                                            duration: const Duration(milliseconds: 160),
-                                            curve: Curves.easeOut,
-                                            padding: EdgeInsets.only(bottom: kb),
-                                            child: SubtaskEditorSheet(initial: newSubs),
-                                          ),
-                                        ),
-                                      );
-                                      return MediaQuery.removeViewInsets(
-                                        context: context,
-                                        removeBottom: true,
-                                        child: sheet,
-                                      );
-                                    },
-                                  );
-                                  if (result != null) {
-                                    setModal(() => newSubs = result);
-                                  }
-                                },
-                                icon: const Icon(Icons.checklist),
-                                label: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  autofocus: true,
+                                  maxLength: titleMax,
+                                  maxLengthEnforcement:
+                                      MaxLengthEnforcement.enforced,
+                                  onChanged: (v) =>
+                                      setModal(() => titleText = v),
+                                  textInputAction: TextInputAction.done,
+                                  onSubmitted: (_) =>
+                                      FocusScope.of(ctx).unfocus(),
+                                  decoration: InputDecoration(
+                                    hintText: "z. B. Wasser trinken 💧",
+                                    counterText:
+                                        "${controller.text.characters.length}/$titleMax",
+                                    filled: true,
+                                    fillColor: isDark
+                                        ? const Color(0xFF2C2C2E)
+                                        : const Color(0xFFF2F2F7),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                /// 🔥 DATE PICKER (optional)
+                                Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
-                                    const Text("Unterpunkte verwalten"),
-                                    if (newSubs.isNotEmpty) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(ctx).colorScheme.primary.withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(999),
-                                        ),
-                                        child: Text(
-                                          "${newSubs.length}",
-                                          style: const TextStyle(fontWeight: FontWeight.w700),
-                                        ),
+                                    OutlinedButton.icon(
+                                      onPressed: () async {
+                                        FocusScope.of(ctx).unfocus();
+                                        final initial = dueDate ?? selectedDate;
+                                        final picked = await showDatePicker(
+                                          context: ctx,
+                                          initialDate: initial,
+                                          firstDate: DateTime(2000),
+                                          lastDate: DateTime(2100),
+                                          helpText: "Datum wählen (optional)",
+                                        );
+                                        if (picked != null) {
+                                          final normalized = DateTime(
+                                            picked.year,
+                                            picked.month,
+                                            picked.day,
+                                          );
+                                          setModal(() {
+                                            dueDate = normalized;
+                                          });
+                                        }
+                                      },
+                                      icon: const Icon(Icons.event),
+                                      label: Text(
+                                        (() {
+                                          if (dueDate == null)
+                                            return "Datum wählen";
+                                          final w = [
+                                            "Mo",
+                                            "Di",
+                                            "Mi",
+                                            "Do",
+                                            "Fr",
+                                            "Sa",
+                                            "So",
+                                          ][dueDate!.weekday - 1];
+                                          final m = [
+                                            "Jan",
+                                            "Feb",
+                                            "Mär",
+                                            "Apr",
+                                            "Mai",
+                                            "Jun",
+                                            "Jul",
+                                            "Aug",
+                                            "Sep",
+                                            "Okt",
+                                            "Nov",
+                                            "Dez",
+                                          ][dueDate!.month - 1];
+                                          return "$w, ${dueDate!.day.toString().padLeft(2, '0')} $m ${dueDate!.year}";
+                                        })(),
                                       ),
-                                    ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      "Optional – wähle ein Datum",
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                   ],
                                 ),
-                              ),
-                              if (newSubs.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Row(
-                                    children: [
-                                      ...newSubs.take(3).map((s) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(right: 6),
-                                          child: Chip(
-                                            label: Text(
-                                              s.title.length > 24 ? "${s.title.substring(0, 24)}…" : s.title,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            visualDensity: VisualDensity.compact,
+
+                                const SizedBox(height: 12),
+
+                                // Kategorienauswahl
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      "Kategorie (optional)",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () async {
+                                        FocusScope.of(ctx).unfocus();
+                                        await Navigator.of(ctx).push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const CategoriesPage(),
                                           ),
                                         );
-                                      }).toList(),
-                                      if (newSubs.length > 3)
-                                        Chip(
-                                          label: Text("+${newSubs.length - 3} weitere"),
-                                          visualDensity: VisualDensity.compact,
+                                        final updated = await store
+                                            .getCategories();
+                                        if (!mounted) return;
+                                        setState(() {
+                                          categories = updated;
+                                        });
+                                        setModal(() {});
+                                      },
+                                      icon: const Icon(Icons.edit, size: 18),
+                                      label: const Text("Verwalten"),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    icon: const Icon(Icons.category_outlined),
+                                    label: Text(() {
+                                      final c = categories.firstWhere(
+                                        (c) => c.id == selectedCategoryId,
+                                        orElse: () => Category(
+                                          id: -1,
+                                          name: 'Keine',
+                                          color: 0,
+                                          iconKey: 'category',
                                         ),
+                                      );
+                                      return c.id == -1
+                                          ? "Kategorie wählen"
+                                          : "Kategorie: ${c.name}";
+                                    }()),
+                                    onPressed: () async {
+                                      FocusScope.of(ctx).unfocus();
+                                      final chosen =
+                                          await showModalBottomSheet<int?>(
+                                            context: ctx,
+                                            isScrollControlled: true,
+                                            useSafeArea: true,
+                                            backgroundColor: Colors.transparent,
+                                            builder: (_) {
+                                              return FractionallySizedBox(
+                                                heightFactor: 0.9,
+                                                child: CategoryPickerSheet(
+                                                  categories: categories,
+                                                  initial: selectedCategoryId,
+                                                ),
+                                              );
+                                            },
+                                          );
+                                      setModal(
+                                        () => selectedCategoryId = chosen,
+                                      );
+                                    },
+                                  ),
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // Unterpunkte (optional)
+                                const Text(
+                                  "Unterpunkte (optional)",
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: () async {
+                                    FocusScope.of(ctx).unfocus();
+                                    final result =
+                                        await showModalBottomSheet<
+                                          List<SubTask>
+                                        >(
+                                          context: ctx,
+                                          isScrollControlled: true,
+                                          useSafeArea: true,
+                                          backgroundColor: Colors.transparent,
+                                          builder: (context) {
+                                            final kb = MediaQuery.of(
+                                              context,
+                                            ).viewInsets.bottom;
+                                            final sheet = FractionallySizedBox(
+                                              heightFactor: 0.95,
+                                              child: SafeArea(
+                                                top: false,
+                                                child: AnimatedContainer(
+                                                  duration: const Duration(
+                                                    milliseconds: 160,
+                                                  ),
+                                                  curve: Curves.easeOut,
+                                                  padding: EdgeInsets.only(
+                                                    bottom: kb,
+                                                  ),
+                                                  child: SubtaskEditorSheet(
+                                                    initial: newSubs,
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                            return MediaQuery.removeViewInsets(
+                                              context: context,
+                                              removeBottom: true,
+                                              child: sheet,
+                                            );
+                                          },
+                                        );
+                                    if (result != null) {
+                                      setModal(() => newSubs = result);
+                                    }
+                                  },
+                                  icon: const Icon(Icons.checklist),
+                                  label: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Text("Unterpunkte verwalten"),
+                                      if (newSubs.isNotEmpty) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(ctx)
+                                                .colorScheme
+                                                .primary
+                                                .withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            "${newSubs.length}",
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
-                              ],
-
-                              const SizedBox(height: 16),
-
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(sheetContext),
-                                    child: const Text("Abbrechen"),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: (controller.text.trim().isEmpty || controller.text.trim().length > titleMax)
-                                        ? null
-                                        : () async {
-                                            final text = controller.text.trim();
-
-                                            final chosen = dueDate ?? selectedDate;
-                                            final normalized = DateTime(chosen.year, chosen.month, chosen.day);
-
-                                            Navigator.pop(sheetContext);
-
-                                            try {
-                                              final created = await store.addHabit(
-                                                text,
-                                                normalized,
-                                                categoryId: selectedCategoryId,
-                                                subtasks: newSubs,
-                                              );
-                                              if (!mounted) return;
-
-                                              setState(() {
-                                                selectedDate = normalized;
-                                                _loading = true;
-                                              });
-
-                                              final items = await store.getByDate(normalized);
-                                              final cats2 = await store.getCategories();
-                                              if (!mounted) return;
-                                              setState(() {
-                                                categories = cats2;
-                                                habits = items;
-                                                _loading = false;
-                                              });
-
-                                              final y = created.dueDate.year.toString().padLeft(4, '0');
-                                              final m = created.dueDate.month.toString().padLeft(2, '0');
-                                              final d = created.dueDate.day.toString().padLeft(2, '0');
-                                              rootMessenger.showSnackBar(
-                                                SnackBar(content: Text("Todo erstellt für $y-$m-$d")),
-                                              );
-                                            } catch (e) {
-                                              if (!mounted) return;
-                                              setState(() => _loading = false);
-                                              rootMessenger.showSnackBar(
-                                                SnackBar(content: Text("Fehler: $e")),
-                                              );
-                                            }
-                                          },
-                                    child: const Text("Hinzufügen"),
+                                if (newSubs.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        ...newSubs.take(3).map((s) {
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                              right: 6,
+                                            ),
+                                            child: Chip(
+                                              label: Text(
+                                                s.title.length > 24
+                                                    ? "${s.title.substring(0, 24)}…"
+                                                    : s.title,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                            ),
+                                          );
+                                        }).toList(),
+                                        if (newSubs.length > 3)
+                                          Chip(
+                                            label: Text(
+                                              "+${newSubs.length - 3} weitere",
+                                            ),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                      ],
+                                    ),
                                   ),
                                 ],
-                              ),
-                            ],
+
+                                const SizedBox(height: 16),
+
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(sheetContext),
+                                      child: const Text("Abbrechen"),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed:
+                                          (controller.text.trim().isEmpty ||
+                                              controller.text.trim().length >
+                                                  titleMax)
+                                          ? null
+                                          : () async {
+                                              final text = controller.text
+                                                  .trim();
+
+                                              final chosen =
+                                                  dueDate ?? selectedDate;
+                                              final normalized = DateTime(
+                                                chosen.year,
+                                                chosen.month,
+                                                chosen.day,
+                                              );
+
+                                              Navigator.pop(sheetContext);
+
+                                              try {
+                                                final created = await store
+                                                    .addHabit(
+                                                      text,
+                                                      normalized,
+                                                      categoryId:
+                                                          selectedCategoryId,
+                                                      subtasks: newSubs,
+                                                    );
+                                                if (!mounted) return;
+
+                                                setState(() {
+                                                  selectedDate = normalized;
+                                                  _loading = true;
+                                                });
+
+                                                final items = await store
+                                                    .getByDate(normalized);
+                                                final cats2 = await store
+                                                    .getCategories();
+                                                if (!mounted) return;
+                                                setState(() {
+                                                  categories = cats2;
+                                                  habits = items;
+                                                  _loading = false;
+                                                });
+
+                                                final y = created.dueDate.year
+                                                    .toString()
+                                                    .padLeft(4, '0');
+                                                final m = created.dueDate.month
+                                                    .toString()
+                                                    .padLeft(2, '0');
+                                                final d = created.dueDate.day
+                                                    .toString()
+                                                    .padLeft(2, '0');
+                                                rootMessenger.showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      "Todo erstellt für $y-$m-$d",
+                                                    ),
+                                                  ),
+                                                );
+                                              } catch (e) {
+                                                if (!mounted) return;
+                                                setState(
+                                                  () => _loading = false,
+                                                );
+                                                rootMessenger.showSnackBar(
+                                                  SnackBar(
+                                                    content: Text("Fehler: $e"),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                      child: const Text("Hinzufügen"),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -965,13 +1150,14 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-            ),
-          );
-        });
+            );
+          },
+        );
       },
     );
   }
 }
+
 /// =====================================================
 /// 🔮 HEADER
 /// =====================================================
@@ -979,10 +1165,7 @@ class _HeaderSection extends StatelessWidget {
   final int count;
   final DateTime selectedDate;
 
-  const _HeaderSection({
-    required this.count,
-    required this.selectedDate,
-  });
+  const _HeaderSection({required this.count, required this.selectedDate});
 
   String _getTitle() {
     final now = DateTime.now();
@@ -1001,7 +1184,20 @@ class _HeaderSection extends StatelessWidget {
     if (diff == -1) return "Gestern";
 
     const weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
-    const months = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+    const months = [
+      "Jan",
+      "Feb",
+      "Mär",
+      "Apr",
+      "Mai",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Okt",
+      "Nov",
+      "Dez",
+    ];
 
     final weekday = weekdays[selected.weekday - 1];
     final day = selected.day.toString().padLeft(2, '0');
@@ -1033,10 +1229,7 @@ class _HeaderSection extends StatelessWidget {
           children: [
             Text(
               _getTitle(),
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             Text(_getCountText()),
           ],
@@ -1076,11 +1269,11 @@ class HabitTile extends StatelessWidget {
   });
 
   List<Color> get colors => const [
-        Color(0xFFFF8A80),
-        Color(0xFF82B1FF),
-        Color(0xFF69F0AE),
-        Color(0xFFFFD180),
-      ];
+    Color(0xFFFF8A80),
+    Color(0xFF82B1FF),
+    Color(0xFF69F0AE),
+    Color(0xFFFFD180),
+  ];
 
   Color getFallbackColor() => colors[name.hashCode % colors.length];
 
@@ -1093,7 +1286,9 @@ class HabitTile extends StatelessWidget {
     final Color borderColor = status == 'done'
         ? Colors.green.withOpacity(0.6)
         : (isSkipped ? Colors.red.withOpacity(0.6) : Colors.transparent);
-    final String displayName = name.length > 80 ? '${name.substring(0, 80)}…' : name;
+    final String displayName = name.length > 80
+        ? '${name.substring(0, 80)}…'
+        : name;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
@@ -1101,17 +1296,14 @@ class HabitTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: borderColor,
-          width: 1.5,
-        ),
+        border: Border.all(color: borderColor, width: 1.5),
         boxShadow: [
           if (!isDark)
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
-            )
+            ),
         ],
       ),
       child: Row(
@@ -1168,7 +1360,10 @@ class HabitTile extends StatelessWidget {
                   if (categoryName != null) ...[
                     const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: base.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(999),
@@ -1182,7 +1377,11 @@ class HabitTile extends StatelessWidget {
                           ],
                           Text(
                             categoryName!,
-                            style: TextStyle(fontSize: 12, color: base, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: base,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
@@ -1192,7 +1391,11 @@ class HabitTile extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.checklist, size: 14, color: isDark ? Colors.white54 : Colors.black45),
+                        Icon(
+                          Icons.checklist,
+                          size: 14,
+                          color: isDark ? Colors.white54 : Colors.black45,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           "${subDone ?? 0}/${subTotal ?? 0} Unterpunkte",
@@ -1205,23 +1408,27 @@ class HabitTile extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    LayoutBuilder(builder: (ctx, c) {
-                      final d = (subDone ?? 0).toDouble();
-                      final t = (subTotal ?? 0).toDouble();
-                      final p = t == 0 ? 0.0 : (d / t).clamp(0.0, 1.0);
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: SizedBox(
-                          height: 6,
-                          child: LinearProgressIndicator(
-                            value: p,
-                            backgroundColor: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
-                            color: const Color(0xFF7C7AE6),
-                            minHeight: 6,
+                    LayoutBuilder(
+                      builder: (ctx, c) {
+                        final d = (subDone ?? 0).toDouble();
+                        final t = (subTotal ?? 0).toDouble();
+                        final p = t == 0 ? 0.0 : (d / t).clamp(0.0, 1.0);
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: SizedBox(
+                            height: 6,
+                            child: LinearProgressIndicator(
+                              value: p,
+                              backgroundColor:
+                                  (isDark ? Colors.white : Colors.black)
+                                      .withOpacity(0.08),
+                              color: const Color(0xFF7C7AE6),
+                              minHeight: 6,
+                            ),
                           ),
-                        ),
-                      );
-                    }),
+                        );
+                      },
+                    ),
                   ],
                 ],
               ),
@@ -1272,9 +1479,10 @@ class _SwipeToDeleteState extends State<_SwipeToDelete>
 
     animation?.removeListener(_listener);
 
-    animation = Tween<double>(begin: offsetX, end: target).animate(
-      CurvedAnimation(parent: controller, curve: Curves.easeOutExpo),
-    );
+    animation = Tween<double>(
+      begin: offsetX,
+      end: target,
+    ).animate(CurvedAnimation(parent: controller, curve: Curves.easeOutExpo));
 
     animation!.addListener(_listener);
 

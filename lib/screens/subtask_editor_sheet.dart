@@ -22,7 +22,9 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
   void initState() {
     super.initState();
     items = List<SubTask>.from(widget.initial);
-    nextId = items.isEmpty ? 1 : (items.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1);
+    nextId = items.isEmpty
+        ? 1
+        : (items.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1);
   }
 
   void _addOne(String title) {
@@ -42,14 +44,19 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text("Mehrere Unterpunkte hinzufügen", style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                const Text(
+                  "Mehrere Unterpunkte hinzufügen",
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: ctrl,
@@ -58,7 +65,9 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                   decoration: InputDecoration(
                     hintText: "Jede Zeile wird zu einem Unterpunkt",
                     filled: true,
-                    fillColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+                    fillColor: isDark
+                        ? const Color(0xFF2C2C2E)
+                        : const Color(0xFFF2F2F7),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
@@ -69,14 +78,22 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Abbrechen")),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text("Abbrechen"),
+                    ),
                     const SizedBox(width: 8),
                     ElevatedButton(
                       onPressed: () {
-                        final lines = ctrl.text.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty);
+                        final lines = ctrl.text
+                            .split('\n')
+                            .map((e) => e.trim())
+                            .where((e) => e.isNotEmpty);
                         setState(() {
                           for (final l in lines) {
-                            items.add(SubTask(id: nextId++, title: l, isDone: false));
+                            items.add(
+                              SubTask(id: nextId++, title: l, isDone: false),
+                            );
                           }
                         });
                         Navigator.pop(ctx);
@@ -84,7 +101,7 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                       child: const Text("Hinzufügen"),
                     ),
                   ],
-                )
+                ),
               ],
             ),
           ),
@@ -128,8 +145,13 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                   label: const Text("Fertig"),
                   style: ElevatedButton.styleFrom(
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
@@ -148,7 +170,10 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.checklist, color: isDark ? Colors.white70 : Colors.black54),
+                        Icon(
+                          Icons.checklist,
+                          color: isDark ? Colors.white70 : Colors.black54,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           "$done von $total erledigt",
@@ -157,7 +182,9 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                         const Spacer(),
                         Text(
                           total == 0 ? "0%" : "${(progress * 100).round()}%",
-                          style: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
+                          style: TextStyle(
+                            color: isDark ? Colors.white60 : Colors.black54,
+                          ),
                         ),
                       ],
                     ),
@@ -168,7 +195,9 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                         height: 8,
                         child: LinearProgressIndicator(
                           value: progress,
-                          backgroundColor: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
+                          backgroundColor:
+                              (isDark ? Colors.white : Colors.black)
+                                  .withOpacity(0.08),
                           color: const Color(0xFF7C7AE6),
                           minHeight: 8,
                         ),
@@ -191,7 +220,8 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                                 width: 92,
                                 height: 92,
                                 decoration: BoxDecoration(
-                                  color: (isDark ? Colors.white : Colors.black).withOpacity(0.06),
+                                  color: (isDark ? Colors.white : Colors.black)
+                                      .withOpacity(0.06),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(Icons.checklist, size: 44),
@@ -199,13 +229,20 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                               const SizedBox(height: 16),
                               const Text(
                                 "Noch keine Unterpunkte",
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                               const SizedBox(height: 12),
                               Text(
                                 "Tipp: Unten kannst du Unterpunkte hinzufügen. Die Tastatur schiebt das Feld automatisch nach oben.",
                                 textAlign: TextAlign.center,
-                                style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white70
+                                      : Colors.black54,
+                                ),
                               ),
                               const SizedBox(height: 4),
                             ],
@@ -226,45 +263,66 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                           final s = items[i];
                           return Padding(
                             key: ValueKey(s.id),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF7F7FB),
+                                color: isDark
+                                    ? const Color(0xFF1C1C1E)
+                                    : const Color(0xFFF7F7FB),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: (isDark ? Colors.white : Colors.black).withOpacity(0.06),
+                                  color: (isDark ? Colors.white : Colors.black)
+                                      .withOpacity(0.06),
                                 ),
                               ),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Checkbox(
                                     value: s.isDone,
                                     onChanged: (_) {
                                       HapticFeedback.selectionClick();
                                       setState(() {
-                                        final idx = items.indexWhere((e) => e.id == s.id);
-                                        items[idx] = items[idx].copyWith(isDone: !items[idx].isDone);
+                                        final idx = items.indexWhere(
+                                          (e) => e.id == s.id,
+                                        );
+                                        items[idx] = items[idx].copyWith(
+                                          isDone: !items[idx].isDone,
+                                        );
                                       });
                                     },
                                   ),
                                   Expanded(
                                     child: TextFormField(
                                       initialValue: s.title,
-                                      maxLines: 2,
+                                      maxLines: 1,
+                                      textAlignVertical:
+                                          TextAlignVertical.center,
                                       decoration: const InputDecoration(
                                         hintText: "Unterpunkt",
                                         border: InputBorder.none,
-                                        contentPadding: EdgeInsets.symmetric(vertical: 14),
+                                        contentPadding: EdgeInsets.symmetric(
+                                          vertical: 10,
+                                        ),
                                       ),
                                       style: TextStyle(
-                                        decoration: s.isDone ? TextDecoration.lineThrough : TextDecoration.none,
+                                        decoration: s.isDone
+                                            ? TextDecoration.lineThrough
+                                            : TextDecoration.none,
                                         fontWeight: FontWeight.w600,
                                       ),
                                       onChanged: (v) {
                                         final t = v.trimLeft();
                                         setState(() {
-                                          final idx = items.indexWhere((e) => e.id == s.id);
-                                          items[idx] = items[idx].copyWith(title: t);
+                                          final idx = items.indexWhere(
+                                            (e) => e.id == s.id,
+                                          );
+                                          items[idx] = items[idx].copyWith(
+                                            title: t,
+                                          );
                                         });
                                       },
                                     ),
@@ -282,8 +340,13 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                                   ReorderableDragStartListener(
                                     index: i,
                                     child: const Padding(
-                                      padding: EdgeInsets.symmetric(horizontal: 8),
-                                      child: Icon(Icons.drag_handle, color: Colors.grey),
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                      child: Icon(
+                                        Icons.drag_handle,
+                                        color: Colors.grey,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -311,7 +374,9 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                             decoration: InputDecoration(
                               hintText: "Unterpunkt hinzufügen",
                               filled: true,
-                              fillColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+                              fillColor: isDark
+                                  ? const Color(0xFF2C2C2E)
+                                  : const Color(0xFFF2F2F7),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(14),
                                 borderSide: BorderSide.none,
@@ -325,7 +390,7 @@ class _SubtaskEditorSheetState extends State<SubtaskEditorSheet> {
                           onPressed: () => _addOne(_addCtrl.text),
                           icon: const Icon(Icons.add),
                           label: const Text("Hinzufügen"),
-                        )
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
