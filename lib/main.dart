@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'package:habit_tracker/models/habit_item.dart';
 import 'package:habit_tracker/data/local_store.dart';
 import 'package:habit_tracker/models/category.dart';
@@ -9,15 +10,32 @@ import 'package:habit_tracker/screens/subtasks_sheet.dart';
 import 'package:habit_tracker/screens/category_picker_sheet.dart';
 import 'package:habit_tracker/models/subtask_model.dart';
 import 'package:habit_tracker/screens/subtask_editor_sheet.dart';
+import 'package:habit_tracker/screens/settings_page.dart';
+
+enum AppViewMode { day, month }
+
+class _NoStretchScrollBehavior extends MaterialScrollBehavior {
+  const _NoStretchScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
+  }
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LocalStore.I.init();
+  await LocalStore.I.applyDayRollover();
   runApp(const HabitApp());
 }
 
 /// =====================================================
-/// 🔥 APP ROOT (THEME + STATE)
+///           APP ROOT (THEME + STATE)
 /// =====================================================
 class HabitApp extends StatefulWidget {
   const HabitApp({super.key});
@@ -97,7 +115,7 @@ class _DateSelectorState extends State<_DateSelector> {
       dates = List.generate(60, (i) => base.subtract(Duration(days: 30 - i)));
       idx = 30; // center
     }
-    // Zentriere ohne notify (kein erneutes Laden auslösen)
+    // Zentriere ohne notify (kein erneutes Laden ausloesen)
     _scrollToIndex(idx, animate: false, notify: false);
   }
 
@@ -137,7 +155,6 @@ class _DateSelectorState extends State<_DateSelector> {
     }
   }
 
-  /// 🔥 PERFEKTER SNAP (OHNE DRIFT)
   void _snapToCenter() {
     if (_isAnimating) return;
 
@@ -171,7 +188,6 @@ class _DateSelectorState extends State<_DateSelector> {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          /// 🔥 LIST
           NotificationListener<ScrollNotification>(
             onNotification: (notification) {
               if (_isAnimating) return false;
@@ -202,7 +218,6 @@ class _DateSelectorState extends State<_DateSelector> {
                     date.month == today.month &&
                     date.day == today.day;
 
-                /// 🔥 STABILE CENTER BERECHNUNG
                 /// Padding ist bereits in der ListView berücksichtigt,
                 /// daher genügt der reine Offset / itemWidth.
                 final centerIndex = _controller.hasClients
@@ -250,7 +265,7 @@ class _DateSelectorState extends State<_DateSelector> {
 
                             const SizedBox(height: 8),
 
-                            // 🔥 Moderne Datumskarte mit Tag + Monat
+                            // Moderne Datumskarte mit Tag + Monat
                             AnimatedContainer(
                               duration: const Duration(milliseconds: 220),
                               width: 56,
@@ -392,8 +407,299 @@ class _DateSelector extends StatefulWidget {
   State<_DateSelector> createState() => _DateSelectorState();
 }
 
+class _MonthSelectorBar extends StatelessWidget {
+  final DateTime monthDate;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onToday;
+
+  const _MonthSelectorBar({
+    required this.monthDate,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onToday,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const months = [
+      "Januar",
+      "Februar",
+      "März",
+      "April",
+      "Mai",
+      "Juni",
+      "Juli",
+      "August",
+      "September",
+      "Oktober",
+      "November",
+      "Dezember",
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.black.withOpacity(0.06),
+          ),
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: onPrevious,
+              icon: Icon(
+                Icons.chevron_left,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+            Expanded(
+              child: Text(
+                "${months[monthDate.month - 1]} ${monthDate.year}",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: onNext,
+              icon: Icon(
+                Icons.chevron_right,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+            const SizedBox(width: 4),
+            FilledButton.tonal(
+              onPressed: onToday,
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark
+                    ? Colors.white.withOpacity(0.08)
+                    : Colors.black.withOpacity(0.06),
+              ),
+              child: Text(
+                "Heute",
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MonthView extends StatelessWidget {
+  final DateTime monthDate;
+  final DateTime selectedDate;
+  final Map<int, List<HabitItem>> itemsByDay;
+  final List<Category> categories;
+  final ValueChanged<DateTime> onSelectDay;
+
+  const _MonthView({
+    required this.monthDate,
+    required this.selectedDate,
+    required this.itemsByDay,
+    required this.categories,
+    required this.onSelectDay,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+    final first = DateTime(monthDate.year, monthDate.month, 1);
+    final daysInMonth = DateTime(monthDate.year, monthDate.month + 1, 0).day;
+    final leading = first.weekday - 1;
+    final totalCells = ((leading + daysInMonth + 6) ~/ 7) * 7;
+    final monthCount = itemsByDay.values.fold<int>(
+      0,
+      (sum, list) => sum + list.length,
+    );
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.05)
+              : Colors.black.withOpacity(0.06),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  "$monthCount Aufgaben im Monat",
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : Colors.black54,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: weekdays
+                .map(
+                  (w) => Expanded(
+                    child: Center(
+                      child: Text(
+                        w,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          color: isDark ? Colors.white70 : Colors.black54,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 10),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            clipBehavior: Clip.hardEdge,
+            itemCount: totalCells,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 1,
+            ),
+            itemBuilder: (context, index) {
+              final dayNumber = index - leading + 1;
+              if (dayNumber < 1 || dayNumber > daysInMonth) {
+                return const SizedBox.shrink();
+              }
+              final date = DateTime(monthDate.year, monthDate.month, dayNumber);
+              final isSelected =
+                  date.year == selectedDate.year &&
+                  date.month == selectedDate.month &&
+                  date.day == selectedDate.day;
+              final dayItems = itemsByDay[dayNumber] ?? const <HabitItem>[];
+              final hasData = dayItems.isNotEmpty;
+              final categoryDots = <Color>[];
+              for (final item in dayItems) {
+                final catId = item.categoryId;
+                if (catId == null) continue;
+                Category? cat;
+                for (final c in categories) {
+                  if (c.id == catId) {
+                    cat = c;
+                    break;
+                  }
+                }
+                if (cat == null) continue;
+                final color = Color(cat.color);
+                if (!categoryDots.any((d) => d.value == color.value)) {
+                  categoryDots.add(color);
+                  if (categoryDots.length >= 3) break;
+                }
+              }
+
+              return GestureDetector(
+                onTap: () => onSelectDay(date),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOut,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFF7C7AE6)
+                          : (isDark
+                                ? Colors.white.withOpacity(0.04)
+                                : Colors.black.withOpacity(0.04)),
+                    ),
+                    color: isSelected
+                        ? const Color(
+                            0xFF7C7AE6,
+                          ).withOpacity(isDark ? 0.22 : 0.16)
+                        : (isDark
+                              ? const Color(0xFF242428)
+                              : const Color(0xFFF3F4F7)),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "$dayNumber",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (!hasData)
+                        Container(
+                          width: 4,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white24 : Colors.black26,
+                            shape: BoxShape.circle,
+                          ),
+                        )
+                      else if (categoryDots.isEmpty)
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white70 : Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                        )
+                      else
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: categoryDots.map((c) {
+                            return Container(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 1.5,
+                              ),
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// =====================================================
-/// 🏠 HOME PAGE
+///                     HOME PAGE
 /// =====================================================
 class HomePage extends StatefulWidget {
   final bool isDark;
@@ -411,43 +717,169 @@ class HomePage extends StatefulWidget {
 
 /// Modell siehe: lib/models/habit_item.dart
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late DateTime selectedDate;
   late DateTime today;
+  late DateTime selectedMonth;
+  late AppViewMode viewMode;
 
   final LocalStore store = LocalStore.I;
   bool _loading = false;
+  Timer? _dayWatcher;
+  DateTime? _lastSeenDay;
 
   List<HabitItem> habits = [];
   List<Category> categories = [];
+  Map<int, List<HabitItem>> monthHabitsByDay = {};
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     final now = DateTime.now();
 
-    /// 👉 WICHTIG: OHNE UHRZEIT
+    /// WICHTIG: OHNE UHRZEIT
     selectedDate = DateTime(now.year, now.month, now.day);
-
     today = selectedDate;
+    selectedMonth = DateTime(now.year, now.month, 1);
+    viewMode = store.viewMode == 'month' ? AppViewMode.month : AppViewMode.day;
+    _lastSeenDay = DateTime(now.year, now.month, now.day);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      setState(() => _loading = true);
-      try {
-        final cats = await store.getCategories();
-        final items = await store.getByDate(selectedDate);
-        if (!mounted) return;
-        setState(() {
-          categories = cats;
-          habits = items;
-          _loading = false;
-        });
-      } catch (_) {
-        if (!mounted) return;
-        setState(() => _loading = false);
-      }
+      await _syncDayState(force: true);
+      await _reloadAll();
     });
+    _dayWatcher = Timer.periodic(const Duration(minutes: 1), (_) {
+      _syncDayState();
+    });
+  }
+
+  DateTime _todayDate() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  Future<void> _syncDayState({bool force = false}) async {
+    final todayDate = _todayDate();
+    final changed =
+        _lastSeenDay == null ||
+        _lastSeenDay!.year != todayDate.year ||
+        _lastSeenDay!.month != todayDate.month ||
+        _lastSeenDay!.day != todayDate.day;
+    if (!force && !changed) return;
+    _lastSeenDay = todayDate;
+
+    final skipped = await store.applyDayRollover();
+    if (!mounted) return;
+    await _loadDate(todayDate);
+    if (!mounted) return;
+    if (skipped > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$skipped Aufgaben wurden auf "skip" gesetzt')),
+      );
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _syncDayState();
+    }
+  }
+
+  Future<void> _reloadAll() async {
+    setState(() => _loading = true);
+    try {
+      final cats = await store.getCategories();
+      final items = await store.getByDate(selectedDate);
+      final monthItems = await store.getByMonth(selectedMonth);
+      final grouped = <int, List<HabitItem>>{};
+      for (final h in monthItems) {
+        grouped.putIfAbsent(h.dueDate.day, () => []).add(h);
+      }
+      if (!mounted) return;
+      setState(() {
+        categories = cats;
+        habits = items;
+        monthHabitsByDay = grouped;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadDate(DateTime date) async {
+    final normalized = DateTime(date.year, date.month, date.day);
+    setState(() {
+      selectedDate = normalized;
+      selectedMonth = DateTime(normalized.year, normalized.month, 1);
+      _loading = true;
+    });
+    try {
+      final items = await store.getByDate(normalized);
+      final monthItems = await store.getByMonth(selectedMonth);
+      final grouped = <int, List<HabitItem>>{};
+      for (final h in monthItems) {
+        grouped.putIfAbsent(h.dueDate.day, () => []).add(h);
+      }
+      if (!mounted) return;
+      setState(() {
+        habits = items;
+        monthHabitsByDay = grouped;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _jumpMonth(int delta) async {
+    final next = DateTime(selectedMonth.year, selectedMonth.month + delta, 1);
+    setState(() {
+      selectedMonth = next;
+      if (selectedDate.year != next.year || selectedDate.month != next.month) {
+        selectedDate = DateTime(next.year, next.month, 1);
+      }
+      _loading = true;
+    });
+    try {
+      final items = await store.getByDate(selectedDate);
+      final monthItems = await store.getByMonth(next);
+      final grouped = <int, List<HabitItem>>{};
+      for (final h in monthItems) {
+        grouped.putIfAbsent(h.dueDate.day, () => []).add(h);
+      }
+      if (!mounted) return;
+      setState(() {
+        habits = items;
+        monthHabitsByDay = grouped;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openSettings() async {
+    final mode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(
+          selectedViewMode: viewMode == AppViewMode.month ? 'month' : 'day',
+        ),
+      ),
+    );
+    if (!mounted || mode == null) return;
+    final next = mode == 'month' ? AppViewMode.month : AppViewMode.day;
+    setState(() => viewMode = next);
+    await store.setViewMode(mode);
+    if (next == AppViewMode.month) {
+      await _loadDate(DateTime.now());
+    }
   }
 
   @override
@@ -485,6 +917,14 @@ class _HomePageState extends State<HomePage> {
                   });
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text("Einstellungen"),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await _openSettings();
+                },
+              ),
             ],
           ),
         ),
@@ -505,151 +945,19 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
 
-      body: Column(
-        children: [
-          /// 🔥 DATE SELECTOR
-          _DateSelector(
-            selectedDate: selectedDate,
-            onChanged: (date) async {
-              final normalized = DateTime(date.year, date.month, date.day);
-              setState(() {
-                selectedDate = normalized;
-                _loading = true;
-              });
-              try {
-                final items = await store.getByDate(normalized);
-                if (!mounted) return;
-                setState(() {
-                  habits = items;
-                  _loading = false;
-                });
-              } catch (_) {
-                if (!mounted) return;
-                setState(() => _loading = false);
-              }
-            },
-          ),
-
-          _HeaderSection(
-            count: todaysHabits.length,
-            selectedDate: selectedDate,
-          ),
-
-          const SizedBox(height: 8),
-
-          Expanded(
-            child: todaysHabits.isEmpty
-                ? const Center(child: Text("🎉 Keine Todos heute!"))
-                : ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: todaysHabits.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final habit = entry.value;
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _SwipeToDelete(
-                          key: ValueKey(habit.id),
-                          onDelete: () {
-                            () async {
-                              try {
-                                await store.delete(habit.id);
-                                if (!mounted) return;
-                                setState(() {
-                                  habits.removeWhere((h) => h.id == habit.id);
-                                });
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text("Deleted '${habit.name}'"),
-                                  ),
-                                );
-                              } catch (e) {
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text("Löschen fehlgeschlagen"),
-                                  ),
-                                );
-                              }
-                            }();
-                          },
-                          child: HabitTile(
-                            name: habit.name,
-                            isDone: habit.isDone,
-                            status: habit.status,
-                            categoryColor: (() {
-                              final c = categories.firstWhere(
-                                (c) => c.id == habit.categoryId,
-                                orElse: () => Category(
-                                  id: -1,
-                                  name: '',
-                                  color: 0,
-                                  iconKey: 'category',
-                                ),
-                              );
-                              return c.id == -1 ? null : Color(c.color);
-                            })(),
-                            categoryIcon: (() {
-                              final c = categories.firstWhere(
-                                (c) => c.id == habit.categoryId,
-                                orElse: () => Category(
-                                  id: -1,
-                                  name: '',
-                                  color: 0,
-                                  iconKey: 'category',
-                                ),
-                              );
-                              if (c.id == -1) return null;
-                              return iconFromKey(c.iconKey);
-                            })(),
-                            categoryName: (() {
-                              final c = categories.firstWhere(
-                                (c) => c.id == habit.categoryId,
-                                orElse: () => Category(
-                                  id: -1,
-                                  name: '',
-                                  color: 0,
-                                  iconKey: 'category',
-                                ),
-                              );
-                              return c.id == -1 ? null : c.name;
-                            })(),
-                            subDone: habit.subtasks
-                                .where((s) => s.isDone)
-                                .length,
-                            subTotal: habit.subtasks.length,
-                            onToggle: () async {
-                              final updated = await store.toggleDone(habit.id);
-                              if (!mounted || updated == null) return;
-                              setState(() {
-                                habits = habits
-                                    .map((h) => h.id == habit.id ? updated : h)
-                                    .toList();
-                              });
-                            },
-                            onOpen: () async {
-                              await showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                builder: (_) => SubtasksSheet(
-                                  habitId: habit.id,
-                                  habitName: habit.name,
-                                ),
-                              );
-                              if (!mounted) return;
-                              final items = await store.getByDate(selectedDate);
-                              setState(() {
-                                habits = items;
-                              });
-                            },
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-          ),
-        ],
-      ),
+      body: viewMode == AppViewMode.month
+          ? _buildMonthModeContent(todaysHabits)
+          : Column(
+              children: [
+                _DateSelector(selectedDate: selectedDate, onChanged: _loadDate),
+                _HeaderSection(
+                  count: todaysHabits.length,
+                  selectedDate: selectedDate,
+                ),
+                const SizedBox(height: 8),
+                Expanded(child: _buildDayHabitsList(todaysHabits)),
+              ],
+            ),
 
       floatingActionButton: FloatingActionButton(
         onPressed: _openAddDialog,
@@ -658,8 +966,291 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildDayHabitsList(
+    List<HabitItem> dayHabits, {
+    String emptyText = "Keine Todos heute!",
+    EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: 16),
+  }) {
+    if (dayHabits.isEmpty) {
+      return Center(child: Text(emptyText));
+    }
+
+    return ListView(
+      padding: padding,
+      children: dayHabits.map((habit) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _SwipeToDelete(
+            key: ValueKey(habit.id),
+            onDelete: () {
+              () async {
+                try {
+                  await store.delete(habit.id);
+                  if (!mounted) return;
+                  await _loadDate(selectedDate);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Deleted '${habit.name}'")),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Löschen fehlgeschlagen")),
+                  );
+                }
+              }();
+            },
+            child: HabitTile(
+              name: habit.name,
+              isDone: habit.isDone,
+              status: habit.status,
+              categoryColor: (() {
+                final c = categories.firstWhere(
+                  (c) => c.id == habit.categoryId,
+                  orElse: () =>
+                      Category(id: -1, name: '', color: 0, iconKey: 'category'),
+                );
+                return c.id == -1 ? null : Color(c.color);
+              })(),
+              categoryIcon: (() {
+                final c = categories.firstWhere(
+                  (c) => c.id == habit.categoryId,
+                  orElse: () =>
+                      Category(id: -1, name: '', color: 0, iconKey: 'category'),
+                );
+                if (c.id == -1) return null;
+                return iconFromKey(c.iconKey);
+              })(),
+              categoryName: (() {
+                final c = categories.firstWhere(
+                  (c) => c.id == habit.categoryId,
+                  orElse: () =>
+                      Category(id: -1, name: '', color: 0, iconKey: 'category'),
+                );
+                return c.id == -1 ? null : c.name;
+              })(),
+              subDone: habit.subtasks.where((s) => s.isDone).length,
+              subTotal: habit.subtasks.length,
+              onToggle: () async {
+                final updated = await store.toggleDone(habit.id);
+                if (!mounted || updated == null) return;
+                await _loadDate(selectedDate);
+              },
+              onOpen: () async {
+                await showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) =>
+                      SubtasksSheet(habitId: habit.id, habitName: habit.name),
+                );
+                if (!mounted) return;
+                await _loadDate(selectedDate);
+              },
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildMonthModeContent(List<HabitItem> dayHabits) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dateText =
+        "${selectedDate.day.toString().padLeft(2, '0')}.${selectedDate.month.toString().padLeft(2, '0')}.${selectedDate.year}";
+
+    return ScrollConfiguration(
+      behavior: const _NoStretchScrollBehavior(),
+      child: CustomScrollView(
+        physics: const ClampingScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: _MonthSelectorBar(
+              monthDate: selectedMonth,
+              onToday: () => _loadDate(DateTime.now()),
+              onPrevious: () => _jumpMonth(-1),
+              onNext: () => _jumpMonth(1),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: _HeaderSection(
+              count: dayHabits.length,
+              selectedDate: selectedDate,
+              monthMode: true,
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 8)),
+          SliverToBoxAdapter(
+            child: _MonthView(
+              monthDate: selectedMonth,
+              selectedDate: selectedDate,
+              itemsByDay: monthHabitsByDay,
+              categories: categories,
+              onSelectDay: _loadDate,
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.05)
+                        : Colors.black.withOpacity(0.06),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.list_alt_rounded,
+                      size: 18,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Todos am $dateText",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      "${dayHabits.length}",
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (dayHabits.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Text("Keine Todos für den ausgewählten Tag"),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final habit = dayHabits[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _SwipeToDelete(
+                      key: ValueKey(habit.id),
+                      onDelete: () {
+                        () async {
+                          try {
+                            await store.delete(habit.id);
+                            if (!mounted) return;
+                            await _loadDate(selectedDate);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("Deleted '${habit.name}'"),
+                              ),
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Löschen fehlgeschlagen"),
+                              ),
+                            );
+                          }
+                        }();
+                      },
+                      child: HabitTile(
+                        name: habit.name,
+                        isDone: habit.isDone,
+                        status: habit.status,
+                        categoryColor: (() {
+                          final c = categories.firstWhere(
+                            (c) => c.id == habit.categoryId,
+                            orElse: () => Category(
+                              id: -1,
+                              name: '',
+                              color: 0,
+                              iconKey: 'category',
+                            ),
+                          );
+                          return c.id == -1 ? null : Color(c.color);
+                        })(),
+                        categoryIcon: (() {
+                          final c = categories.firstWhere(
+                            (c) => c.id == habit.categoryId,
+                            orElse: () => Category(
+                              id: -1,
+                              name: '',
+                              color: 0,
+                              iconKey: 'category',
+                            ),
+                          );
+                          if (c.id == -1) return null;
+                          return iconFromKey(c.iconKey);
+                        })(),
+                        categoryName: (() {
+                          final c = categories.firstWhere(
+                            (c) => c.id == habit.categoryId,
+                            orElse: () => Category(
+                              id: -1,
+                              name: '',
+                              color: 0,
+                              iconKey: 'category',
+                            ),
+                          );
+                          return c.id == -1 ? null : c.name;
+                        })(),
+                        subDone: habit.subtasks.where((s) => s.isDone).length,
+                        subTotal: habit.subtasks.length,
+                        onToggle: () async {
+                          final updated = await store.toggleDone(habit.id);
+                          if (!mounted || updated == null) return;
+                          await _loadDate(selectedDate);
+                        },
+                        onOpen: () async {
+                          await showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            builder: (_) => SubtasksSheet(
+                              habitId: habit.id,
+                              habitName: habit.name,
+                            ),
+                          );
+                          if (!mounted) return;
+                          await _loadDate(selectedDate);
+                        },
+                      ),
+                    ),
+                  );
+                }, childCount: dayHabits.length),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _dayWatcher?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   /// =====================================================
-  /// ➕ ADD DIALOG
+  ///                   ADD DIALOG
   /// =====================================================
   void _openAddDialog() {
     final controller = TextEditingController();
@@ -766,7 +1357,7 @@ class _HomePageState extends State<HomePage> {
                                   onSubmitted: (_) =>
                                       FocusScope.of(ctx).unfocus(),
                                   decoration: InputDecoration(
-                                    hintText: "z. B. Wasser trinken 💧",
+                                    hintText: "z. B. Wasser trinken",
                                     counterText:
                                         "${controller.text.characters.length}/$titleMax",
                                     filled: true,
@@ -782,7 +1373,7 @@ class _HomePageState extends State<HomePage> {
 
                                 const SizedBox(height: 16),
 
-                                /// 🔥 DATE PICKER (optional)
+                                /// DATE PICKER (optional)
                                 Column(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
@@ -843,7 +1434,7 @@ class _HomePageState extends State<HomePage> {
                                     ),
                                     const SizedBox(height: 8),
                                     const Text(
-                                      "Optional – wähle ein Datum",
+                                      "Optional - wähle ein Datum",
                                       style: TextStyle(
                                         color: Colors.grey,
                                         fontSize: 12,
@@ -1029,7 +1620,7 @@ class _HomePageState extends State<HomePage> {
                                             child: Chip(
                                               label: Text(
                                                 s.title.length > 24
-                                                    ? "${s.title.substring(0, 24)}…"
+                                                    ? "${s.title.substring(0, 24)}..."
                                                     : s.title,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -1092,21 +1683,12 @@ class _HomePageState extends State<HomePage> {
                                                       subtasks: newSubs,
                                                     );
                                                 if (!mounted) return;
-
-                                                setState(() {
-                                                  selectedDate = normalized;
-                                                  _loading = true;
-                                                });
-
-                                                final items = await store
-                                                    .getByDate(normalized);
+                                                await _loadDate(normalized);
                                                 final cats2 = await store
                                                     .getCategories();
                                                 if (!mounted) return;
                                                 setState(() {
                                                   categories = cats2;
-                                                  habits = items;
-                                                  _loading = false;
                                                 });
 
                                                 final y = created.dueDate.year
@@ -1159,13 +1741,18 @@ class _HomePageState extends State<HomePage> {
 }
 
 /// =====================================================
-/// 🔮 HEADER
+///                       HEADER
 /// =====================================================
 class _HeaderSection extends StatelessWidget {
   final int count;
   final DateTime selectedDate;
+  final bool monthMode;
 
-  const _HeaderSection({required this.count, required this.selectedDate});
+  const _HeaderSection({
+    required this.count,
+    required this.selectedDate,
+    this.monthMode = false,
+  });
 
   String _getTitle() {
     final now = DateTime.now();
@@ -1179,9 +1766,11 @@ class _HeaderSection extends StatelessWidget {
 
     final diff = selected.difference(today).inDays;
 
-    if (diff == 0) return "Heute";
-    if (diff == 1) return "Morgen";
-    if (diff == -1) return "Gestern";
+    if (!monthMode) {
+      if (diff == 0) return "Heute";
+      if (diff == 1) return "Morgen";
+      if (diff == -1) return "Gestern";
+    }
 
     const weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
     const months = [
@@ -1240,7 +1829,7 @@ class _HeaderSection extends StatelessWidget {
 }
 
 /// =====================================================
-/// 🎨 HABIT TILE (controlled)
+///            HABIT TILE (controlled)
 /// =====================================================
 class HabitTile extends StatelessWidget {
   final String name;
@@ -1287,7 +1876,7 @@ class HabitTile extends StatelessWidget {
         ? Colors.green.withOpacity(0.6)
         : (isSkipped ? Colors.red.withOpacity(0.6) : Colors.transparent);
     final String displayName = name.length > 80
-        ? '${name.substring(0, 80)}…'
+        ? '${name.substring(0, 80)}...'
         : name;
 
     return AnimatedContainer(
@@ -1441,7 +2030,7 @@ class HabitTile extends StatelessWidget {
 }
 
 /// =====================================================
-/// 🔥 SWIPE TO DELETE
+///                SWIPE TO DELETE
 /// =====================================================
 class _SwipeToDelete extends StatefulWidget {
   final Widget child;
